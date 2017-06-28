@@ -87,11 +87,6 @@ public class ConsoleRunner {
                 System.exit(-1);
             }
 
-//            if (cmd.hasOption(CLASS_PATH) && !cmd.hasOption(JSON_PATH)) {
-//                System.out.println("ERROR: Path to json file is absent!");
-//                System.exit(-1);
-//            }
-
             String templateCode = cmd.getOptionValue(TEMPLATE_CODE, ReportTemplate.DEFAULT_TEMPLATE_CODE);
             PropertiesLoader propertiesLoader = new DefaultPropertiesLoader(
                     cmd.getOptionValue(PROPERTIES_PATH, DefaultPropertiesLoader.DEFAULT_PROPERTIES_PATH));
@@ -101,17 +96,30 @@ public class ConsoleRunner {
             Report report = null;
 
             if (cmd.hasOption(CLASS_PATH)) {
-                String templateFilename = FilenameUtils.getBaseName(cmd.getOptionValue(TEMPLATE_PATH)) + "." + FilenameUtils.getExtension(cmd.getOptionValue(TEMPLATE_PATH));
+                String templatePath = cmd.getOptionValue(TEMPLATE_PATH);
+                String templateFileExtension = FilenameUtils.getExtension(templatePath);
+                String templateFilename = FilenameUtils.getBaseName(templatePath) + "." + templateFileExtension;
                 System.out.println("TEMPLATE: " + templateFilename);
                 ReportBuilder reportBuilder = new ReportBuilder();
                 ReportTemplateBuilder reportTemplateBuilder = null;
-                System.out.println("FILENAME: " + FilenameUtils.getBaseName(cmd.getOptionValue(TEMPLATE_PATH)));
+                System.out.println("FILENAME: " + FilenameUtils.getBaseName(templatePath));
+                System.out.println("TYPE: " + templateFileExtension);
+
+                ReportOutputType outputType;
+                if ("doc".equals(templateFileExtension) || "docx".equals(templateFileExtension)) {
+                    outputType = ReportOutputType.docx;
+                } else if ("xls".equals(templateFileExtension) || "xlsx".equals(templateFileExtension)) {
+                    outputType = ReportOutputType.xls;
+                } else {
+                    throw new MissingArgumentException("Wrong output file type!");
+                }
+
                 try {
                     reportTemplateBuilder = new ReportTemplateBuilder()
                             .documentName(templateFilename)
-                            .documentPath(cmd.getOptionValue(TEMPLATE_PATH))
+                            .documentPath(templatePath)
                             .outputNamePattern(cmd.getOptionValue(OUTPUT_PATH))
-                            .outputType(ReportOutputType.xls)
+                            .outputType(outputType)
                             .readFileFromPath();
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -119,7 +127,7 @@ public class ConsoleRunner {
                 reportBuilder.template(reportTemplateBuilder.build());
                 String json = parseJsonFile(cmd.getOptionValue(JSON_PATH));
                 report = compileAndGetReport(cmd.getOptionValue(CLASS_PATH), reportBuilder, json);
-            } else if (cmd.hasOption(XML_PATH)){
+            } else if (cmd.hasOption(XML_PATH)) {
                 XmlReader xmlReader = new DefaultXmlReader();
                 report = xmlReader.parseXml(FileUtils.readFileToString(new File(cmd.getOptionValue(XML_PATH))));
             }
