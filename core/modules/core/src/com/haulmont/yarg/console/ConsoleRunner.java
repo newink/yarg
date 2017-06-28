@@ -31,8 +31,11 @@ import com.haulmont.yarg.reporting.DataExtractorImpl;
 import com.haulmont.yarg.reporting.Reporting;
 import com.haulmont.yarg.reporting.RunParams;
 import com.haulmont.yarg.structure.Report;
+import com.haulmont.yarg.structure.ReportOutputType;
 import com.haulmont.yarg.structure.ReportParameter;
 import com.haulmont.yarg.structure.ReportTemplate;
+import com.haulmont.yarg.structure.impl.ReportBuilder;
+import com.haulmont.yarg.structure.impl.ReportTemplateBuilder;
 import com.haulmont.yarg.structure.xml.XmlReader;
 import com.haulmont.yarg.structure.xml.impl.DefaultXmlReader;
 import com.haulmont.yarg.util.converter.ObjectToStringConverter;
@@ -40,8 +43,10 @@ import com.haulmont.yarg.util.converter.ObjectToStringConverterImpl;
 import com.haulmont.yarg.util.groovy.DefaultScriptingImpl;
 import com.haulmont.yarg.util.properties.DefaultPropertiesLoader;
 import com.haulmont.yarg.util.properties.PropertiesLoader;
+import net.openhft.compiler.CompilerUtils;
 import org.apache.commons.cli.*;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang.StringUtils;
 
 import java.io.File;
@@ -54,13 +59,18 @@ import java.util.Properties;
 
 public class ConsoleRunner {
     public static final String PROPERTIES_PATH = "prop";
-    public static final String REPORT_PATH = "rp";
+    public static final String XML_PATH = "rp";
     public static final String OUTPUT_PATH = "op";
     public static final String TEMPLATE_CODE = "tc";
     public static final String REPORT_PARAMETER = "P";
+    public static final String CLASS_PATH = "cl";
+    public static final String TEMPLATE_PATH = "tp";
+    public static final String JSON_PATH = "json";
+    public static final String YARG_PACKAGE_NAME = "com.haulmont.yarg.console.";
     public static volatile boolean doExitWhenFinished = true;
 
     protected static ObjectToStringConverter converter = new ObjectToStringConverterImpl();
+
 
     public static void main(String[] args) {
         Options options = createOptions();
@@ -71,11 +81,16 @@ public class ConsoleRunner {
             cmd = parser.parse(options, args);
 
 
-            if (!cmd.hasOption(REPORT_PATH) || !cmd.hasOption(OUTPUT_PATH)) {
+            if ((!cmd.hasOption(XML_PATH) && !cmd.hasOption(CLASS_PATH)) || !cmd.hasOption(OUTPUT_PATH)) {
                 HelpFormatter formatter = new HelpFormatter();
                 formatter.printHelp("report", options);
                 System.exit(-1);
             }
+
+//            if (cmd.hasOption(CLASS_PATH) && !cmd.hasOption(JSON_PATH)) {
+//                System.out.println("ERROR: Path to json file is absent!");
+//                System.exit(-1);
+//            }
 
             String templateCode = cmd.getOptionValue(TEMPLATE_CODE, ReportTemplate.DEFAULT_TEMPLATE_CODE);
             PropertiesLoader propertiesLoader = new DefaultPropertiesLoader(
@@ -83,8 +98,33 @@ public class ConsoleRunner {
 
             Reporting reporting = createReportingEngine(propertiesLoader);
 
-            XmlReader xmlReader = new DefaultXmlReader();
-            Report report = xmlReader.parseXml(FileUtils.readFileToString(new File(cmd.getOptionValue(REPORT_PATH))));
+            Report report = null;
+
+            if (cmd.hasOption(CLASS_PATH)) {
+                String templateFilename = FilenameUtils.getBaseName(cmd.getOptionValue(TEMPLATE_PATH)) + "." + FilenameUtils.getExtension(cmd.getOptionValue(TEMPLATE_PATH));
+                System.out.println("TEMPLATE: " + templateFilename);
+                ReportBuilder reportBuilder = new ReportBuilder();
+                ReportTemplateBuilder reportTemplateBuilder = null;
+                System.out.println("FILENAME: " + FilenameUtils.getBaseName(cmd.getOptionValue(TEMPLATE_PATH)));
+                try {
+                    reportTemplateBuilder = new ReportTemplateBuilder()
+                            .documentName(templateFilename)
+                            .documentPath(cmd.getOptionValue(TEMPLATE_PATH))
+                            .outputNamePattern(cmd.getOptionValue(OUTPUT_PATH))
+                            .outputType(ReportOutputType.xls)
+                            .readFileFromPath();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                reportBuilder.template(reportTemplateBuilder.build());
+                String json = parseJsonFile(cmd.getOptionValue(JSON_PATH));
+                report = compileAndGetReport(cmd.getOptionValue(CLASS_PATH), reportBuilder, json);
+            } else if (cmd.hasOption(XML_PATH)){
+                XmlReader xmlReader = new DefaultXmlReader();
+                report = xmlReader.parseXml(FileUtils.readFileToString(new File(cmd.getOptionValue(XML_PATH))));
+            }
+
+
             Map<String, Object> params = parseReportParams(cmd, report);
 
             reporting.runReport(new RunParams(report)
@@ -100,6 +140,20 @@ public class ConsoleRunner {
                 System.exit(-1);
             }
         }
+    }
+
+    private static String parseJsonFile(String jsonFilePath) {
+        if (jsonFilePath == null) {
+            return null;
+        }
+        String fileAsString = null;
+        try {
+            File jsonFile = new File(jsonFilePath);
+            fileAsString = FileUtils.readFileToString(jsonFile);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return fileAsString;
     }
 
     private static Map<String, Object> parseReportParams(CommandLine cmd, Report report) {
@@ -171,12 +225,34 @@ public class ConsoleRunner {
         return reporting;
     }
 
+    private static Report compileAndGetReport(String reportPath, ReportBuilder builder, String jsonString) {
+        AbstractReport report = null;
+        try {
+            File reportFile = new File(reportPath);
+            String fileAsString = FileUtils.readFileToString(reportFile);
+            Class reportClass = CompilerUtils.CACHED_COMPILER.loadFromJava(YARG_PACKAGE_NAME + FilenameUtils.getBaseName(reportPath), fileAsString);
+            report = (AbstractReport) reportClass.newInstance();
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        } catch (InstantiationException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }
+        return report.getReport(builder, jsonString);
+    }
+
     private static Options createOptions() {
         Options options = new Options();
         options.addOption(PROPERTIES_PATH, true, "reporting properties path");
-        options.addOption(REPORT_PATH, true, "target report path");
+        options.addOption(XML_PATH, true, "target xml report path");
+        options.addOption(CLASS_PATH, true, "compiled report class path");
         options.addOption(OUTPUT_PATH, true, "output document path");
         options.addOption(TEMPLATE_CODE, true, "template code");
+        options.addOption(TEMPLATE_PATH, true, "xls template path");
+        options.addOption(JSON_PATH, true, "JSON options file path");
         OptionBuilder
                 .withArgName("parameter=value")
                 .hasOptionalArgs()

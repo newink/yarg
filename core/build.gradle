@@ -182,6 +182,7 @@ configure(core) {
 
     dependencies {
         compile(api)
+        compile(group: 'net.openhft', name: 'compiler', version: '2.3.0')
         compile(group: 'commons-cli', name: 'commons-cli', version: '1.2')
         compile(group: 'commons-logging', name: 'commons-logging', version: '1.1.1')
         compile(group: 'commons-lang', name: 'commons-lang', version: '2.6')
@@ -247,9 +248,13 @@ configure(core) {
             exclude(group: 'junit', module: 'junit')
         }
         compile(group: "com.jayway.jsonpath", name: "json-path", version: "2.1.0")
+        compile(group: 'org.xerial', name: 'sqlite-jdbc', version: '3.18.0')
+        compile files('/home/newink/web/src/lib/ojdbc7.jar')
+
 
         testCompile(group: 'junit', name: 'junit', version: '4.5')
         testCompile(group: 'org.hsqldb', name: 'hsqldb', version: '2.3.3')
+
     }
 
     mainClassName = "com.haulmont.yarg.console.ConsoleRunner"
