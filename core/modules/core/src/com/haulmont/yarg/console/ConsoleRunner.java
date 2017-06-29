@@ -49,9 +49,12 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang.StringUtils;
 
+import javax.sql.DataSource;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -239,7 +242,8 @@ public class ConsoleRunner {
             File reportFile = new File(reportPath);
             String fileAsString = FileUtils.readFileToString(reportFile);
             Class reportClass = CompilerUtils.CACHED_COMPILER.loadFromJava(YARG_PACKAGE_NAME + FilenameUtils.getBaseName(reportPath), fileAsString);
-            report = (AbstractReport) reportClass.newInstance();
+            Constructor dataSourceConstructor = reportClass.getConstructor(DataSource.class);
+            report = (AbstractReport) dataSourceConstructor.newInstance(DatasourceHolder.dataSource);
         } catch (IOException e) {
             e.printStackTrace();
         } catch (ClassNotFoundException e) {
@@ -247,6 +251,10 @@ public class ConsoleRunner {
         } catch (InstantiationException e) {
             e.printStackTrace();
         } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
             e.printStackTrace();
         }
         return report.getReport(builder, jsonString);
