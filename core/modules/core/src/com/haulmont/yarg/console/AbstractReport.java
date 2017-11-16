@@ -10,6 +10,8 @@ abstract public class AbstractReport {
 
     protected DataSource dataSource;
 
+    protected String additionalInfo;
+
     public AbstractReport(DataSource dataSource) {
         this.dataSource = dataSource;
     }
@@ -19,6 +21,6 @@ abstract public class AbstractReport {
     abstract public ReportOutputType getOutputType();
 
     public String getAdditionalInfo() {
-        return "not overloaded method!";
+        return additionalInfo;
     }
 }
