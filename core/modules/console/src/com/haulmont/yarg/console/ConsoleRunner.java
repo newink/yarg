@@ -139,7 +139,7 @@ public class ConsoleRunner {
                     new FileOutputStream(cmd.getOptionValue(OUTPUT_PATH)));
 
             if (abstractReport !=null) {
-                System.out.println("\nAdditional data provided by report: " + abstractReport.getAdditionalData());
+                System.out.println("\nAdditional data provided by report: " + abstractReport.getAdditionalInfo());
             }
             if (doExitWhenFinished) {
                 System.exit(0);
