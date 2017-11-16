@@ -9,4 +9,8 @@ abstract public class AbstractReport {
     abstract public Report getReport(ReportBuilder reportBuilder, String jsonString);
 
     abstract public ReportOutputType getOutputType();
+
+    public String getAdditionalData() {
+        return "not overloaded method!";
+    }
 }

@@ -15,6 +15,13 @@
  */
 package com.haulmont.yarg.console;
 
+import com.haulmont.yarg.formatters.factory.DefaultFormatterFactory;
+import com.haulmont.yarg.formatters.impl.doc.connector.OfficeIntegration;
+import com.haulmont.yarg.loaders.factory.DefaultLoaderFactory;
+import com.haulmont.yarg.loaders.impl.GroovyDataLoader;
+import com.haulmont.yarg.loaders.impl.JsonDataLoader;
+import com.haulmont.yarg.loaders.impl.SqlDataLoader;
+import com.haulmont.yarg.reporting.DataExtractorImpl;
 import com.haulmont.yarg.reporting.Reporting;
 import com.haulmont.yarg.reporting.RunParams;
 import com.haulmont.yarg.structure.Report;
@@ -27,6 +34,7 @@ import com.haulmont.yarg.structure.xml.XmlReader;
 import com.haulmont.yarg.structure.xml.impl.DefaultXmlReader;
 import com.haulmont.yarg.util.converter.ObjectToStringConverter;
 import com.haulmont.yarg.util.converter.ObjectToStringConverterImpl;
+import com.haulmont.yarg.util.groovy.DefaultScriptingImpl;
 import com.haulmont.yarg.util.properties.DefaultPropertiesLoader;
 import com.haulmont.yarg.util.properties.PropertiesLoader;
 import net.openhft.compiler.CompilerUtils;
@@ -37,6 +45,7 @@ import org.apache.commons.lang.StringUtils;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -79,7 +88,7 @@ public class ConsoleRunner {
             Reporting reporting = new ReportEngineCreator().createReportingEngine(propertiesLoader);
 
             Report report = null;
-
+            AbstractReport abstractReport = null;
             if (cmd.hasOption(CLASS_PATH)) {
                 String templatePath = cmd.getOptionValue(TEMPLATE_PATH);
                 String templateFileExtension = FilenameUtils.getExtension(templatePath);
@@ -111,7 +120,8 @@ public class ConsoleRunner {
                 }
                 reportBuilder.template(reportTemplateBuilder.build());
                 String json = parseJsonFile(cmd.getOptionValue(JSON_PATH));
-                report = compileAndGetReport(cmd.getOptionValue(CLASS_PATH), reportBuilder, json);
+                abstractReport = compileAndGetReport(cmd.getOptionValue(CLASS_PATH));
+                report = abstractReport.getReport(reportBuilder, json);
             } else if (cmd.hasOption(XML_PATH)) {
                 XmlReader xmlReader = new DefaultXmlReader();
                 report = xmlReader.parseXml(FileUtils.readFileToString(new File(cmd.getOptionValue(XML_PATH))));
@@ -124,6 +134,10 @@ public class ConsoleRunner {
                             .templateCode(templateCode)
                             .params(params),
                     new FileOutputStream(cmd.getOptionValue(OUTPUT_PATH)));
+
+            if (abstractReport !=null) {
+                System.out.println("\nAdditional data provided by report: " + abstractReport.getAdditionalData());
+            }
             if (doExitWhenFinished) {
                 System.exit(0);
             }
@@ -218,7 +232,7 @@ public class ConsoleRunner {
         return reporting;
     }
 
-    private static Report compileAndGetReport(String reportPath, ReportBuilder builder, String jsonString) {
+    private static AbstractReport compileAndGetReport(String reportPath) {
         AbstractReport report = null;
         try {
             File reportFile = new File(reportPath);
@@ -234,7 +248,7 @@ public class ConsoleRunner {
         } catch (IllegalAccessException e) {
             e.printStackTrace();
         }
-        return report.getReport(builder, jsonString);
+        return report;
     }
 
     private static Options createOptions() {
