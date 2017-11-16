@@ -249,7 +249,7 @@ configure(core) {
         compile(group: "com.jayway.jsonpath", name: "json-path", version: "2.1.0")
         compile(group: 'org.xerial', name: 'sqlite-jdbc', version: '3.18.0')
         compile 'net.openhft:compiler:2.3.0'
-        compile files('/home/newink/web/src/lib/ojdbc7.jar')
+        compile files('/home/newink/work/web/src/lib/ojdbc7.jar')
 
         compile(group: "com.opencsv", name: "opencsv", version: "3.10")
         compile group: 'org.olap4j', name: 'olap4j', version: '1.2.0'
