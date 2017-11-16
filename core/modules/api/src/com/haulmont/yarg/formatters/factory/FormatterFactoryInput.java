@@ -13,15 +13,10 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
-/**
- *
- * @author degtyarjov
- * @version $Id$
- */
 package com.haulmont.yarg.formatters.factory;
 
 import com.haulmont.yarg.structure.BandData;
+import com.haulmont.yarg.structure.ReportOutputType;
 import com.haulmont.yarg.structure.ReportTemplate;
 
 import java.io.OutputStream;
@@ -36,6 +31,8 @@ public class FormatterFactoryInput {
     protected final BandData rootBand;
     protected final ReportTemplate reportTemplate;
     protected final OutputStream outputStream;
+
+    protected ReportOutputType outputType = null;
 
     public FormatterFactoryInput(String templateExtension, BandData rootBand, ReportTemplate reportTemplate, OutputStream outputStream) {
         if (templateExtension == null) {
@@ -52,6 +49,11 @@ public class FormatterFactoryInput {
         this.outputStream = outputStream;
     }
 
+    public FormatterFactoryInput(String templateExtension, BandData rootBand, ReportTemplate reportTemplate, ReportOutputType outputType, OutputStream outputStream) {
+        this(templateExtension, rootBand, reportTemplate, outputStream);
+        this.outputType = outputType;
+    }
+
     public String getTemplateExtension() {
         return templateExtension;
     }
@@ -66,5 +68,9 @@ public class FormatterFactoryInput {
 
     public OutputStream getOutputStream() {
         return outputStream;
+    }
+
+    public ReportOutputType getOutputType() {
+        return outputType;
     }
 }

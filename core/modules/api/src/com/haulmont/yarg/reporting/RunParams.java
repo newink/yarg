@@ -13,16 +13,10 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
-/**
- *
- * @author degtyarjov
- * @version $Id$
- */
 package com.haulmont.yarg.reporting;
 
-import com.google.common.base.Preconditions;
 import com.haulmont.yarg.structure.Report;
+import com.haulmont.yarg.structure.ReportOutputType;
 import com.haulmont.yarg.structure.ReportTemplate;
 
 import java.util.HashMap;
@@ -34,6 +28,7 @@ import java.util.Map;
 public class RunParams {
     protected Report report;
     protected ReportTemplate reportTemplate;
+    protected ReportOutputType outputType;
     protected Map<String, Object> params = new HashMap<String, Object>();
 
     public RunParams(Report report) {
@@ -46,9 +41,13 @@ public class RunParams {
      * @param templateCode - string code of template
      */
     public RunParams templateCode(String templateCode) {
-        Preconditions.checkNotNull(templateCode, "\"templateCode\" parameter can not be null");
+        if (templateCode == null) {
+            throw new NullPointerException("\"templateCode\" parameter can not be null");
+        }
         this.reportTemplate = report.getReportTemplates().get(templateCode);
-        Preconditions.checkNotNull(reportTemplate, String.format("Report template not found for code [%s]", templateCode));
+        if (reportTemplate == null) {
+            throw new NullPointerException(String.format("Report template not found for code [%s]", templateCode));
+        }
         return this;
     }
 
@@ -56,7 +55,9 @@ public class RunParams {
      * Setup template. Throws validation exception if template is null
      */
     public RunParams template(ReportTemplate reportTemplate) {
-        Preconditions.checkNotNull(reportTemplate, "\"reportTemplate\" parameter can not be null");
+        if (reportTemplate == null) {
+            throw new NullPointerException("\"reportTemplate\" parameter can not be null");
+        }
         this.reportTemplate = reportTemplate;
         return this;
     }
@@ -65,7 +66,9 @@ public class RunParams {
      * Adds parameters from map
      */
     public RunParams params(Map<String, Object> params) {
-        Preconditions.checkNotNull(params, "\"params\" parameter can not be null");
+        if (params == null) {
+            throw new NullPointerException("\"params\" parameter can not be null");
+        }
         this.params.putAll(params);
         return this;
     }
@@ -75,6 +78,14 @@ public class RunParams {
      */
     public RunParams param(String key, Object value) {
         params.put(key, value);
+        return this;
+    }
+
+    /**
+     * Add output type
+     */
+    public RunParams output(ReportOutputType outputType) {
+        this.outputType = outputType;
         return this;
     }
 }

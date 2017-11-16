@@ -13,12 +13,6 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
-/**
- *
- * @author degtyarjov
- * @version $Id$
- */
 package com.haulmont.yarg.reporting;
 
 import com.google.common.base.Preconditions;
@@ -32,7 +26,7 @@ import com.haulmont.yarg.structure.*;
 import com.haulmont.yarg.util.converter.ObjectToStringConverter;
 import com.haulmont.yarg.util.converter.ObjectToStringConverterImpl;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,18 +73,18 @@ public class Reporting implements ReportingAPI {
 
     @Override
     public ReportOutputDocument runReport(RunParams runParams, OutputStream outputStream) {
-        return runReport(runParams.report, runParams.reportTemplate, runParams.params, outputStream);
+        return runReport(runParams.report, runParams.reportTemplate, runParams.outputType, runParams.params, outputStream);
     }
 
     @Override
     public ReportOutputDocument runReport(RunParams runParams) {
         ByteArrayOutputStream result = new ByteArrayOutputStream();
-        ReportOutputDocument reportOutputDocument = runReport(runParams.report, runParams.reportTemplate, runParams.params, result);
+        ReportOutputDocument reportOutputDocument = runReport(runParams.report, runParams.reportTemplate, runParams.outputType, runParams.params, result);
         reportOutputDocument.setContent(result.toByteArray());
         return reportOutputDocument;
     }
 
-    protected ReportOutputDocument runReport(Report report, ReportTemplate reportTemplate, Map<String, Object> params, OutputStream outputStream) {
+    protected ReportOutputDocument runReport(Report report, ReportTemplate reportTemplate, ReportOutputType outputType, Map<String, Object> params, OutputStream outputStream) {
         try {
             Preconditions.checkNotNull(report, "\"report\" parameter can not be null");
             Preconditions.checkNotNull(reportTemplate, "\"reportTemplate\" can not be null");
@@ -100,16 +94,17 @@ public class Reporting implements ReportingAPI {
             Map<String, Object> handledParams = handleParameters(report, params);
             logReport("Started report [%s] with parameters [%s]", report, handledParams);
 
+            ReportOutputType finalOutputType = (outputType != null) ? outputType : reportTemplate.getOutputType();
             BandData rootBand = loadBandData(report, handledParams);
-            generateReport(report, reportTemplate, outputStream, handledParams, rootBand);
+            generateReport(report, reportTemplate, finalOutputType, outputStream, handledParams, rootBand);
 
             logReport("Finished report [%s] with parameters [%s]", report, handledParams);
 
-            String outputName = resolveOutputFileName(report, reportTemplate, rootBand);
-            return createReportOutputDocument(report, reportTemplate, outputName, rootBand);
+            String outputName = resolveOutputFileName(report, reportTemplate, outputType, rootBand);
+            return createReportOutputDocument(report, finalOutputType, outputName, rootBand);
         } catch (ReportingException e) {
             logReport("An error occurred while running report [%s] with parameters [%s].", report, params);
-            logger.info("Trace: ", e);
+            logException(e);
             //validation exception is usually shown to clients, so probably there is no need to add report name there (to keep the original message)
             if (!(e instanceof ValidationException)) {
                 e.setReportDetails(format(" Report name [%s]", report.getName()));
@@ -118,7 +113,8 @@ public class Reporting implements ReportingAPI {
         }
     }
 
-    protected void generateReport(Report report, ReportTemplate reportTemplate, OutputStream outputStream, Map<String, Object> handledParams, BandData rootBand) {
+    protected void generateReport(Report report, ReportTemplate reportTemplate, ReportOutputType outputType,
+                                  OutputStream outputStream, Map<String, Object> handledParams, BandData rootBand) {
         String extension = StringUtils.substringAfterLast(reportTemplate.getDocumentName(), ".");
         if (reportTemplate.isCustom()) {
             try {
@@ -128,7 +124,7 @@ public class Reporting implements ReportingAPI {
                 throw new ReportingException(format("An error occurred while processing custom template [%s].", reportTemplate.getDocumentName()), e);
             }
         } else {
-            FormatterFactoryInput factoryInput = new FormatterFactoryInput(extension, rootBand, reportTemplate, outputStream);
+            FormatterFactoryInput factoryInput = new FormatterFactoryInput(extension, rootBand, reportTemplate, outputType, outputStream);
             ReportFormatter formatter = formatterFactory.createFormatter(factoryInput);
             formatter.renderDocument();
         }
@@ -178,11 +174,15 @@ public class Reporting implements ReportingAPI {
         logger.info(format(caption, report.getName(), parametersString));
     }
 
-    protected ReportOutputDocument createReportOutputDocument(Report report, ReportTemplate reportTemplate, String outputName, BandData rootBand) {
-        return new ReportOutputDocumentImpl(report, null, outputName, reportTemplate.getOutputType());
+    protected void logException(ReportingException e) {
+        logger.info("Trace: ", e);
     }
 
-    protected String resolveOutputFileName(Report report, ReportTemplate reportTemplate, BandData rootBand) {
+    protected ReportOutputDocument createReportOutputDocument(Report report, ReportOutputType outputType, String outputName, BandData rootBand) {
+        return new ReportOutputDocumentImpl(report, null, outputName, outputType);
+    }
+
+    protected String resolveOutputFileName(Report report, ReportTemplate reportTemplate, ReportOutputType outputType, BandData rootBand) {
         String outputNamePattern = reportTemplate.getOutputNamePattern();
         String outputName = reportTemplate.getDocumentName();
         Pattern pattern = Pattern.compile("\\$\\{([A-z0-9_]+)\\.([A-z0-9_]+)\\}");
@@ -218,7 +218,8 @@ public class Reporting implements ReportingAPI {
         }
 
         if (ReportOutputType.custom != reportTemplate.getOutputType()) {
-            outputName = format("%s.%s", StringUtils.substringBeforeLast(outputName, "."), reportTemplate.getOutputType().getId());
+            ReportOutputType finalOutputType = (outputType != null ) ? outputType : reportTemplate.getOutputType();
+            outputName = format("%s.%s", StringUtils.substringBeforeLast(outputName, "."), finalOutputType.getId());
         }
 
         return outputName;

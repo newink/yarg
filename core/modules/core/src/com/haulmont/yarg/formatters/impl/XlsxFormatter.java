@@ -13,25 +13,21 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
-/**
- * @author degtyarjov
- * @version $Id$
- */
 package com.haulmont.yarg.formatters.impl;
 
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.LinkedHashMultimap;
 import com.haulmont.yarg.exception.ReportingException;
 import com.haulmont.yarg.formatters.factory.FormatterFactoryInput;
-import com.haulmont.yarg.formatters.impl.xls.PdfConverter;
+import com.haulmont.yarg.formatters.impl.xls.DocumentConverter;
 import com.haulmont.yarg.formatters.impl.xlsx.*;
 import com.haulmont.yarg.formatters.impl.xlsx.hints.XslxHintProcessor;
 import com.haulmont.yarg.structure.BandData;
 import com.haulmont.yarg.structure.BandOrientation;
 import com.haulmont.yarg.structure.BandVisitor;
 import com.haulmont.yarg.structure.ReportOutputType;
-import org.apache.commons.collections.CollectionUtils;
+import com.haulmont.yarg.util.docx4j.XmlCopyUtils;
+import com.opencsv.CSVWriter;
 import org.apache.commons.io.IOUtils;
 import org.apache.poi.hssf.usermodel.HSSFDateUtil;
 import org.docx4j.XmlUtils;
@@ -50,14 +46,17 @@ import org.xlsx4j.jaxb.Context;
 import org.xlsx4j.sml.*;
 import org.xlsx4j.sml.CTHeaderFooter;
 
+import javax.xml.bind.Marshaller;
+import javax.xml.bind.Unmarshaller;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.util.*;
 import java.util.regex.Matcher;
 
 public class XlsxFormatter extends AbstractFormatter {
-    protected PdfConverter pdfConverter;
+    protected DocumentConverter documentConverter;
     protected Document template;
     protected Document result;
 
@@ -74,6 +73,9 @@ public class XlsxFormatter extends AbstractFormatter {
 
     protected int previousRangesRightOffset;
 
+    protected Unmarshaller unmarshaller;
+    protected Marshaller marshaller;
+
     protected static final Logger log = LoggerFactory.getLogger(XlsxFormatter.class);
 
     public XlsxFormatter(FormatterFactoryInput formatterFactoryInput) {
@@ -81,13 +83,15 @@ public class XlsxFormatter extends AbstractFormatter {
         supportedOutputTypes.add(ReportOutputType.xlsx);
     }
 
-    public void setPdfConverter(PdfConverter pdfConverter) {
-        this.pdfConverter = pdfConverter;
+    public void setDocumentConverter(DocumentConverter documentConverter) {
+        this.documentConverter = documentConverter;
     }
 
     @Override
     public void renderDocument() {
         init();
+
+        validateTemplateContainsNamedRange();
 
         hintProcessor.init(template, result);
         findVerticalDependencies();
@@ -109,30 +113,49 @@ public class XlsxFormatter extends AbstractFormatter {
         saveAndClose();
     }
 
+    protected void validateTemplateContainsNamedRange() {
+        if (Objects.isNull(template.getWorkbook().getDefinedNames())) {
+            throw wrapWithReportingException("An error occurred while rendering document from template. Template does not contain named ranges");
+        }
+    }
+
     protected void saveAndClose() {
         try {
-            if (ReportOutputType.xlsx.equals(reportTemplate.getOutputType())) {
+            if (ReportOutputType.xlsx.equals(outputType)) {
                 writeToOutputStream(result.getPackage(), outputStream);
                 outputStream.flush();
-            } else if (ReportOutputType.pdf.equals(reportTemplate.getOutputType())) {
-                if (pdfConverter != null) {
+            } else if (ReportOutputType.csv.equals(outputType)) {
+                saveXlsxAsCsv(result, outputStream);
+                outputStream.flush();
+            } else if (ReportOutputType.pdf.equals(outputType)) {
+                if (documentConverter != null) {
                     ByteArrayOutputStream bos = new ByteArrayOutputStream();
                     writeToOutputStream(result.getPackage(), bos);
-                    pdfConverter.convertToPdf(PdfConverter.FileType.SPREADSHEET, bos.toByteArray(), outputStream);
+                    documentConverter.convertToPdf(DocumentConverter.FileType.SPREADSHEET, bos.toByteArray(), outputStream);
                     outputStream.flush();
                 } else {
                     throw new UnsupportedOperationException(
-                            String.format(
-                                    "XlsxFormatter could not convert result to pdf without Libre/Open office connected. " +
-                                            "Please setup Libre/Open office connection details."));
+                            "XlsxFormatter could not convert result to pdf without Libre/Open office connected. " +
+                                    "Please setup Libre/Open office connection details.");
+                }
+            } else if (ReportOutputType.html.equals(outputType)) {
+                if (documentConverter != null) {
+                    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                    writeToOutputStream(result.getPackage(), bos);
+                    documentConverter.convertToHtml(DocumentConverter.FileType.SPREADSHEET, bos.toByteArray(), outputStream);
+                    outputStream.flush();
+                } else {
+                    throw new UnsupportedOperationException(
+                            "XlsxFormatter could not convert result to html without Libre/Open office connected. " +
+                                    "Please setup Libre/Open office connection details.");
                 }
             } else {
-                throw new UnsupportedOperationException(String.format("XlsxFormatter could not output file with type [%s]", reportTemplate.getOutputType()));
+                throw new UnsupportedOperationException(String.format("XlsxFormatter could not output file with type [%s]", outputType));
             }
         } catch (Docx4JException e) {
             throw wrapWithReportingException("An error occurred while saving result report", e);
         } catch (IOException e) {
-            throw wrapWithReportingException("An error occurred while saving result report to PDF", e);
+            throw wrapWithReportingException("An error occurred while saving result report to " + outputType.getId(), e);
         } finally {
             IOUtils.closeQuietly(outputStream);
         }
@@ -140,10 +163,12 @@ public class XlsxFormatter extends AbstractFormatter {
 
     protected void init() {
         try {
-            template = Document.create((SpreadsheetMLPackage) SpreadsheetMLPackage.load(reportTemplate.getDocumentContent()));
-            result = Document.create((SpreadsheetMLPackage) SpreadsheetMLPackage.load(reportTemplate.getDocumentContent()));
+            template = Document.create(SpreadsheetMLPackage.load(reportTemplate.getDocumentContent()));
+            result = Document.create(SpreadsheetMLPackage.load(reportTemplate.getDocumentContent()));
             result.getWorkbook().getCalcPr().setCalcMode(STCalcMode.AUTO);
             result.getWorkbook().getCalcPr().setFullCalcOnLoad(true);
+            marshaller = XmlCopyUtils.createMarshaller(Context.jcSML);
+            unmarshaller = XmlCopyUtils.createUnmarshaller(Context.jcSML);
         } catch (Exception e) {
             throw wrapWithReportingException(String.format("An error occurred while loading template [%s]", reportTemplate.getDocumentName()), e);
         }
@@ -441,8 +466,15 @@ public class XlsxFormatter extends AbstractFormatter {
         if (calculationChain != null) {
             CTCalcCell calcCell = new CTCalcCell();
             calcCell.setR(cellWithFormula.getR());
-            if (formulaCount == 1) {//just a workaround for Excel, which shows errors if some of <c> tags, except the first, has i attribute
-                calcCell.setI(formulaCount);
+            String sheetName = originalFormulaRange.getSheet();
+            Sheets sheets = template.getWorkbook().getSheets();
+            if (sheets != null && sheets.getSheet() != null) {
+                for (Sheet sheet : sheets.getSheet()) {
+                    if (Objects.equals(sheet.getName(), sheetName)) {
+                        calcCell.setI((int) sheet.getSheetId());
+                        break;
+                    }
+                }
             }
             calculationChain.getC().add(calcCell);
         }
@@ -513,7 +545,7 @@ public class XlsxFormatter extends AbstractFormatter {
             updateRangeMappings(band, templateRange, resultCells);
 
             //render children
-            if (CollectionUtils.isNotEmpty(resultCells)) {
+            if (resultCells != null && !resultCells.isEmpty()) {
                 for (BandData child : band.getChildrenList()) {
                     writeBand(child);
                 }
@@ -537,8 +569,9 @@ public class XlsxFormatter extends AbstractFormatter {
     }
 
     protected void updateRangeMappings(BandData band, Range templateRange, List<Cell> resultCells) {
-        if (CollectionUtils.isNotEmpty(resultCells)) {
-            Range resultRange = Range.fromCells(templateRange.getSheet(), getFirst(resultCells).getR(), resultCells.get(resultCells.size() - 1).getR());
+        if (resultCells != null && !resultCells.isEmpty()) {
+            Range resultRange = Range.fromCells(templateRange.getSheet(), getFirst(resultCells).getR(),
+                    resultCells.get(resultCells.size() - 1).getR());
             rangeDependencies.addDependency(templateRange, resultRange);
             bandsForRanges.add(band, templateRange, resultRange);
             lastRenderedRangeForBandName.put(band.getName(), resultRange);
@@ -645,7 +678,7 @@ public class XlsxFormatter extends AbstractFormatter {
                     templateRange.getLastColumn(), templateRange.getFirstRow() + i);
             Map<CellReference, Cell> cellsForOneRowRange = template.getCellsByRange(oneRowRange);
             List<Cell> templateCells = new ArrayList<Cell>(cellsForOneRowRange.values());
-            Row templateRow = CollectionUtils.isNotEmpty(templateCells) ?
+            Row templateRow = !templateCells.isEmpty() ?
                     (Row) templateCells.get(0).getParent() :
                     resultSheet.getSheetData().getRow().get(oneRowRange.getFirstRow() - 1);
 
@@ -730,11 +763,11 @@ public class XlsxFormatter extends AbstractFormatter {
     }
 
     protected List<Cell> copyCells(Range templateRange, BandData bandData, Row newRow, List<Cell> templateCells) {
-        List<Cell> resultCells = new ArrayList<Cell>();
+        List<Cell> resultCells = new ArrayList<>();
 
         Worksheet resultWorksheet = getWorksheet(newRow);
         for (Cell templateCell : templateCells) {
-            Cell newCell = XmlUtils.deepCopy(templateCell, Context.jcSML);
+            Cell newCell = copyCell(templateCell);
 
             if (newCell.getF() != null) {
                 addFormulaForPostProcessing(templateRange, bandData, newRow, templateCell, newCell);
@@ -780,6 +813,10 @@ public class XlsxFormatter extends AbstractFormatter {
         return resultCells;
     }
 
+    protected Cell copyCell(Cell cell) {
+        return XmlCopyUtils.copyCell(cell, unmarshaller, marshaller);
+    }
+
     protected Worksheet getWorksheet(Row newRow) {
         SheetData resultSheetData = (SheetData) newRow.getParent();
         return (Worksheet) resultSheetData.getParent();
@@ -800,13 +837,18 @@ public class XlsxFormatter extends AbstractFormatter {
         newRow.setCustomHeight(true);
         CTPageBreak rowBreaks = templateWorksheet.getRowBreaks();
         if (rowBreaks != null && rowBreaks.getBrk() != null) {
+            CTPageBreak resultWorksheetRowBreaks = resultWorksheet.getRowBreaks();
             for (CTBreak templateBreak : rowBreaks.getBrk()) {
                 if (templateRow.getR().equals(templateBreak.getId())) {
                     CTBreak newBreak = XmlUtils.deepCopy(templateBreak, Context.jcSML);
                     newBreak.setId(newRow.getR());
-                    resultWorksheet.getRowBreaks().getBrk().add(newBreak);
+                    resultWorksheetRowBreaks.getBrk().add(newBreak);
                 }
             }
+
+            long rowBreaksCount = resultWorksheetRowBreaks.getBrk().size();
+            resultWorksheetRowBreaks.setCount(rowBreaksCount);
+            resultWorksheetRowBreaks.setManualBreakCount(rowBreaksCount);
         }
     }
 
@@ -862,7 +904,7 @@ public class XlsxFormatter extends AbstractFormatter {
     }
 
     protected <T> T getFirst(List<T> list) {
-        if (CollectionUtils.isNotEmpty(list)) {
+        if (list != null && !list.isEmpty()) {
             return list.get(0);
         }
 
@@ -870,11 +912,36 @@ public class XlsxFormatter extends AbstractFormatter {
     }
 
     protected <T> T getLast(List<T> list) {
-        if (CollectionUtils.isNotEmpty(list)) {
+        if (list != null && !list.isEmpty()) {
             return list.get(list.size() - 1);
         }
 
         return null;
+    }
+
+    protected void saveXlsxAsCsv(Document document, OutputStream outputStream) throws IOException, Docx4JException {
+        CSVWriter writer = new CSVWriter(new OutputStreamWriter(outputStream), ';', CSVWriter.DEFAULT_QUOTE_CHARACTER);
+
+        for (Document.SheetWrapper sheetWrapper : document.getWorksheets()) {
+            Worksheet worksheet = sheetWrapper.getWorksheet().getContents();
+            for (Row row : worksheet.getSheetData().getRow()) {
+                String rows[] = new String[row.getC().size()];
+                List<Cell> cells = row.getC();
+
+                boolean emptyRow = true;
+                for (int i = 0; i < cells.size(); i++) {
+                    Cell cell = cells.get(i);
+                    String value = cell.getV();
+                    rows[i] = value;
+                    if (value != null && !value.isEmpty())
+                        emptyRow = false;
+                }
+
+                if (!emptyRow)
+                    writer.writeNext(rows);
+            }
+        }
+        writer.close();
     }
 
     protected void writeToOutputStream(SpreadsheetMLPackage mlPackage, OutputStream outputStream) throws Docx4JException {
@@ -886,7 +953,7 @@ public class XlsxFormatter extends AbstractFormatter {
         for (Document.SheetWrapper sheetWrapper : result.getWorksheets()) {
             Worksheet worksheet = sheetWrapper.getWorksheet().getJaxbElement();
             if (worksheet.getHeaderFooter() != null) {
-                CTHeaderFooter headerFooter  = worksheet.getHeaderFooter();
+                CTHeaderFooter headerFooter = worksheet.getHeaderFooter();
                 if (headerFooter.getOddHeader() != null) {
                     headerFooter.setOddHeader(insertBandDataToString(headerFooter.getOddHeader()));
                 }
@@ -900,7 +967,7 @@ public class XlsxFormatter extends AbstractFormatter {
     protected void updateSheetNames() {
         Sheets sheets = result.getWorkbook().getSheets();
         if (sheets != null && sheets.getSheet() != null) {
-            for (Sheet sheet: sheets.getSheet()) {
+            for (Sheet sheet : sheets.getSheet()) {
                 if (sheet.getName() != null) {
                     sheet.setName(insertBandDataToString(sheet.getName()));
                 }

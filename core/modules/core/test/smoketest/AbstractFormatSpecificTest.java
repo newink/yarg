@@ -5,7 +5,7 @@ import com.haulmont.yarg.structure.BandOrientation;
 import com.haulmont.yarg.structure.ReportFieldFormat;
 import com.haulmont.yarg.structure.impl.ReportFieldFormatImpl;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -17,10 +17,15 @@ import java.util.*;
  */
 public abstract class AbstractFormatSpecificTest {
     protected String openOfficePath = System.getenv("YARG_OPEN_OFFICE_PATH");
+    protected String fontsDirectory = System.getenv("YARG_FONTS_DIRECTORY");
 
     public AbstractFormatSpecificTest() {
         if (StringUtils.isBlank(openOfficePath)) {
             openOfficePath = "C:/Program Files (x86)/LibreOffice 5/program";
+        }
+
+        if (StringUtils.isBlank(fontsDirectory)) {
+            fontsDirectory = "C:/Windows/Fonts";
         }
     }
 

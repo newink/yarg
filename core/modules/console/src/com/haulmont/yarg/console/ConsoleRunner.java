@@ -13,21 +13,8 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-
-/**
- * @author degtyarjov
- * @version $Id$
- */
 package com.haulmont.yarg.console;
 
-import com.haulmont.yarg.formatters.factory.DefaultFormatterFactory;
-import com.haulmont.yarg.formatters.impl.doc.connector.OfficeIntegration;
-import com.haulmont.yarg.loaders.factory.DefaultLoaderFactory;
-import com.haulmont.yarg.loaders.factory.PropertiesSqlLoaderFactory;
-import com.haulmont.yarg.loaders.impl.GroovyDataLoader;
-import com.haulmont.yarg.loaders.impl.JsonDataLoader;
-import com.haulmont.yarg.loaders.impl.SqlDataLoader;
-import com.haulmont.yarg.reporting.DataExtractorImpl;
 import com.haulmont.yarg.reporting.Reporting;
 import com.haulmont.yarg.reporting.RunParams;
 import com.haulmont.yarg.structure.Report;
@@ -40,7 +27,6 @@ import com.haulmont.yarg.structure.xml.XmlReader;
 import com.haulmont.yarg.structure.xml.impl.DefaultXmlReader;
 import com.haulmont.yarg.util.converter.ObjectToStringConverter;
 import com.haulmont.yarg.util.converter.ObjectToStringConverterImpl;
-import com.haulmont.yarg.util.groovy.DefaultScriptingImpl;
 import com.haulmont.yarg.util.properties.DefaultPropertiesLoader;
 import com.haulmont.yarg.util.properties.PropertiesLoader;
 import net.openhft.compiler.CompilerUtils;
@@ -51,7 +37,6 @@ import org.apache.commons.lang.StringUtils;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -91,7 +76,7 @@ public class ConsoleRunner {
             PropertiesLoader propertiesLoader = new DefaultPropertiesLoader(
                     cmd.getOptionValue(PROPERTIES_PATH, DefaultPropertiesLoader.DEFAULT_PROPERTIES_PATH));
 
-            Reporting reporting = createReportingEngine(propertiesLoader);
+            Reporting reporting = new ReportEngineCreator().createReportingEngine(propertiesLoader);
 
             Report report = null;
 

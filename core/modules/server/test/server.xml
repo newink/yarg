@@ -18,31 +18,26 @@
 
 <report name="report">
     <templates>
-        <template code="DEFAULT" documentName="test.xls" documentPath="./modules/core/test/console/console.xls" outputType="xls"
+        <template code="DEFAULT" documentName="test.xlsx" documentPath="./modules/server/test/server.xlsx"
+                  outputType="xlsx"
                   outputNamePattern="outputNamePattern"/>
     </templates>
     <parameters>
-        <parameter name="param1" alias="param1" required="true" class="java.lang.String" defaultValue="defaultParam1"/>
-        <parameter name="param2" alias="param2" required="true" class="java.sql.Date"/>
-        <parameter name="param3" alias="param3" required="true" class="java.lang.Integer"/>
-        <parameter name="param4" alias="param4" required="true" class="java.lang.String"/>
+        <parameter name="suffix" alias="suffix" required="false" class="java.lang.String"/>
     </parameters>
     <formats/>
     <rootBand name="Root" orientation="H">
         <bands>
+            <band name="Header" orientation="H">
+                <bands/>
+                <queries/>
+            </band>
             <band name="Band1" orientation="H">
                 <bands/>
                 <queries>
                     <query name="Data_set_1" type="groovy">
-                        <script>return [['col1':'groovy1', 'col2':'groovy2'], ['col1':'groovy3', 'col2':'groovy4']]</script>
-                    </query>
-                </queries>
-            </band>
-            <band name="Band2" orientation="H">
-                <bands/>
-                <queries>
-                    <query name="Data_set_1" type="json">
-                        <script>parameter=param4 $</script>
+                        <script>return [['col1':'groovy1' + params['suffix'], 'col2':'groovy2'], ['col1':'groovy3' + params['suffix'], 'col2':'groovy4']]
+                        </script>
                     </query>
                 </queries>
             </band>
