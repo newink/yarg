@@ -19,6 +19,8 @@ abstract public class AbstractReport {
     abstract public ReportOutputType getOutputType();
 
     public String getAdditionalInfo() {
-        return "not overloaded method!";
+        return "Additional Info method was not overloaded!";
     }
+
+    public void postprocessFile(String fileName) { return; }
 }
